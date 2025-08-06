@@ -3,80 +3,81 @@ package controllers
 import (
     "net/http"
     "blog/v2/models"
+    "blog/v2/dto"
+    "blog/v2/repository"
 
     "github.com/gin-gonic/gin"
 )
 
-type CreatePostInput struct {
-    Title   string `json:"title" binding:"required"`
-    Content string `json:"content" binding:"required"`
-}
-
 func CreatePost(c *gin.Context) {
-    var input CreatePostInput
+    var input dto.CreatePostInput
     if err := c.ShouldBindJSON(&input); err != nil {
         c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
 
     post := models.Post{Title: input.Title, Content: input.Content}
-    models.DB.Create(&post)
+    if err := repository.CreatePost(models.DB, &post); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
 
-    c.JSON(http.StatusOK, gin.H{"data": post})
+    c.JSON(http.StatusCreated, gin.H{"data": post})
 }
 
 func FindPosts(c *gin.Context) {
-    var posts []models.Post
-    models.DB.Find(&posts)
+    posts, err := repository.GetAllPosts(models.DB)
+    if err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
 
     c.JSON(http.StatusOK, gin.H{"data": posts})
 }
 
 func FindPost(c *gin.Context) {
-    var post models.Post
-
-    if err := models.DB.Where("id = ?", c.Param("id")).First(&post).Error; err != nil {
-        c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": err.Error()})
+    post, err := repository.GetPostByID(models.DB, c.Param("id"))
+    if err != nil {
+        c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Post not found"})
         return
     }
 
     c.JSON(http.StatusOK, gin.H{"data": post})
 }
 
-
-type UpdatePostInput struct {
-    Title   string `json:"title"`
-    Content string `json:"content"`
-}
-
 func UpdatePost(c *gin.Context) {
-    var post models.Post
-    if err := models.DB.Where("id = ?", c.Param("id")).First(&post).Error; err != nil {
-        c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "record not found"})
+    post, err := repository.GetPostByID(models.DB, c.Param("id"))
+    if err != nil {
+        c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Post not found"})
         return
     }
 
-    var input UpdatePostInput
-
+    var input dto.UpdatePostInput
     if err := c.ShouldBindJSON(&input); err != nil {
         c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
 
-    updatedPost := models.Post{Title: input.Title, Content: input.Content}
+    updated := models.Post{Title: input.Title, Content: input.Content}
+    if err := repository.UpdatePost(models.DB, post, updated); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
 
-    models.DB.Model(&post).Updates(&updatedPost)
     c.JSON(http.StatusOK, gin.H{"data": post})
 }
 
 func DeletePost(c *gin.Context) {
-    var post models.Post
-    if err := models.DB.Where("id = ?", c.Param("id")).First(&post).Error; err != nil {
-        c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "record not found"})
+    post, err := repository.GetPostByID(models.DB, c.Param("id"))
+    if err != nil {
+        c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Post not found"})
         return
     }
 
-    models.DB.Delete(&post)
+    if err := repository.DeletePost(models.DB, post); err != nil {
+        c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
     c.JSON(http.StatusOK, gin.H{"data": "success"})
 }
-
